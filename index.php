@@ -42,7 +42,9 @@ $usd_to_bdt_rate = $site_config['usd_to_bdt_rate'] ?? 110;
 $site_logo_path = $site_config['site_logo'] ?? '';
 $hero_slider_interval = $site_config['hero_slider_interval'] ?? 5000;
 $hot_deals_speed = $site_config['hot_deals_speed'] ?? 40;
-$payment_methods = $site_config['payment_methods'] ?? [];
+
+// Load Payment Gateways from the new table
+$payment_gateways = $pdo->query("SELECT id, name, number, logo_url, is_crypto FROM payment_gateways ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC);
 
 // --- Prepare Data for Vue.js ---
 $all_categories = [];
@@ -724,24 +726,24 @@ if ($request_path) {
                                         <div class="space-y-4">
                                             <div>
                                                 <label class="block text-sm font-medium text-gray-700 mb-2">Select Payment Method</label>
-                                                <div class="flex items-center gap-6">
-                                                    <template v-for="(method, name) in paymentMethods" :key="name">
-                                                        <button type="button" @click="selectPayment(method, name)" 
-                                                                :class="{'border-violet-500 ring-2 ring-violet-200': selectedPayment && selectedPayment.name === name, 'border-gray-300': !selectedPayment || selectedPayment.name !== name}" 
-                                                                class="w-20 h-20 p-2 border-2 rounded-lg flex items-center justify-center transition">
-                                                            <img :src="basePath + '/' + method.logo_url" :alt="name" class="max-h-8 object-contain">
+                                                <div class="flex flex-wrap items-center gap-4">
+                                                    <template v-for="gateway in paymentGateways" :key="gateway.id">
+                                                        <button type="button" @click="selectPayment(gateway)"
+                                                                :class="{'border-violet-500 ring-2 ring-violet-200': selectedPayment && selectedPayment.id === gateway.id, 'border-gray-300': !selectedPayment || selectedPayment.id !== gateway.id}"
+                                                                class="w-28 h-20 p-2 border-2 rounded-lg flex items-center justify-center transition-all duration-200 ease-in-out transform hover:scale-105">
+                                                            <img :src="basePath + '/' + gateway.logo_url" :alt="gateway.name" class="max-h-12 object-contain">
                                                         </button>
                                                     </template>
                                                 </div>
                                             </div>
 
                                             <template v-if="selectedPayment">
-                                                <div class="mt-4 space-y-4 pt-4 border-t">
+                                                <div class="mt-6 space-y-4 pt-6 border-t">
                                                     <div>
-                                                        <p class="text-gray-700 font-medium text-base">Please send the total amount to the following <strong>{{ selectedPayment.name }}</strong> <span>{{ selectedPayment.name === 'Binance Pay' ? 'Pay ID' : 'number' }}</span>:</p>
-                                                        <div class="flex items-center justify-start gap-3 mt-2">
-                                                            <span ref="paymentNumber" class="text-lg font-bold text-gray-800">{{ selectedPayment.pay_id || selectedPayment.number }}</span>
-                                                            <button type="button" @click="copyToClipboard(selectedPayment.pay_id || selectedPayment.number)" class="text-gray-500 hover:text-gray-800 transition" :class="{'text-green-600': copySuccess}">
+                                                        <p class="text-gray-700 font-medium text-base">Please send the total amount to the following <strong>{{ selectedPayment.name }}</strong> <span v-if="selectedPayment.is_crypto">Pay ID</span><span v-else>number</span>:</p>
+                                                        <div class="flex items-center justify-start gap-3 mt-2 bg-gray-100 p-3 rounded-lg">
+                                                            <span ref="paymentNumber" class="text-xl font-bold text-gray-800 tracking-wider">{{ selectedPayment.number }}</span>
+                                                            <button type="button" @click="copyToClipboard(selectedPayment.number)" class="text-gray-500 hover:text-gray-800 transition" :class="{'text-green-600': copySuccess}">
                                                                 <i class="far fa-copy text-lg" v-if="!copySuccess"></i>
                                                                 <span class="flex items-center gap-1" v-if="copySuccess">
                                                                     <i class="fas fa-check text-lg"></i>
@@ -753,9 +755,9 @@ if ($request_path) {
                                                     <div>
                                                         <h4 class="text-sm font-semibold text-gray-800 mb-2 font-display tracking-wider">Instructions</h4>
                                                         <ul class="list-disc list-inside text-xs text-gray-600 space-y-1">
-                                                            <li v-if="selectedPayment.name === 'bKash' || selectedPayment.name === 'Nagad'">Open your {{ selectedPayment.name }} app and select 'Send Money'.</li>
-                                                            <li v-if="selectedPayment.name === 'Binance Pay'">Open your Binance app and select 'Pay'.</li>
-                                                            <li>Enter the {{ selectedPayment.name === 'Binance Pay' ? 'Pay ID' : 'number' }} provided above and the total amount.</li>
+                                                            <li v-if="!selectedPayment.is_crypto">Open your {{ selectedPayment.name }} app and select 'Send Money'.</li>
+                                                            <li v-if="selectedPayment.is_crypto">Open your crypto wallet/exchange and select the Pay/Send option.</li>
+                                                            <li>Enter the <span v-if="selectedPayment.is_crypto">Pay ID</span><span v-else>number</span> provided above and the total amount.</li>
                                                             <li>Complete the transaction and copy the Transaction ID.</li>
                                                             <li>Paste the ID in the field below.</li>
                                                         </ul>
@@ -973,7 +975,7 @@ if ($request_path) {
                     basePath: '<?= BASE_PATH ?>',
                     allProducts: <?= json_encode($all_products_flat) ?>,
                     allCoupons: <?= json_encode($all_coupons_data) ?>,
-                    paymentMethods: <?= json_encode($payment_methods) ?>,
+                    paymentGateways: <?= json_encode($payment_gateways) ?>,
                     usdRate: <?= $usd_to_bdt_rate ?>,
                     pageContents: {
                         about_us: `<?= addslashes($site_config['page_content_about_us'] ?? 'Content not set.') ?>`,

@@ -261,19 +261,60 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             update_setting($pdo, 'favicon', $current_favicon);
             $redirect_url = 'admin.php?view=settings';
             break;
-        case 'update_payment_methods':
-            $payment_methods = $site_config['payment_methods'] ?? [];
-            foreach ($_POST['payment_methods'] as $name => $details) {
-                if (isset($details['number'])) $payment_methods[$name]['number'] = htmlspecialchars(trim($details['number']));
-                if (isset($details['pay_id'])) $payment_methods[$name]['pay_id'] = htmlspecialchars(trim($details['pay_id']));
-                if (isset($_POST['delete_logos'][$name]) && !empty($payment_methods[$name]['logo_url']) && file_exists($payment_methods[$name]['logo_url'])) { unlink($payment_methods[$name]['logo_url']); $payment_methods[$name]['logo_url'] = ''; }
-                if (isset($_FILES['payment_logos']['name'][$name]) && $_FILES['payment_logos']['error'][$name] === UPLOAD_ERR_OK) {
-                    $file = ['name' => $_FILES['payment_logos']['name'][$name], 'tmp_name' => $_FILES['payment_logos']['tmp_name'][$name], 'error' => $_FILES['payment_logos']['error'][$name]];
-                    if($dest = handle_image_upload($file, $upload_dir, 'payment-')) { if(!empty($payment_methods[$name]['logo_url']) && file_exists($payment_methods[$name]['logo_url'])) unlink($payment_methods[$name]['logo_url']); $payment_methods[$name]['logo_url'] = $dest; }
-                }
+        case 'add_gateway':
+            $name = htmlspecialchars(trim($_POST['name']));
+            $number = htmlspecialchars(trim($_POST['number']));
+            $is_crypto = isset($_POST['is_crypto']) ? 1 : 0;
+            $logo_url = handle_image_upload($_FILES['logo'] ?? null, $upload_dir, 'gateway-');
+
+            $stmt = $pdo->prepare("INSERT INTO payment_gateways (name, number, is_crypto, logo_url) VALUES (?, ?, ?, ?)");
+            $stmt->execute([$name, $number, $is_crypto, $logo_url]);
+
+            $redirect_url = 'admin.php?view=payment-gateways';
+            break;
+
+        case 'edit_gateway':
+            $gateway_id = $_POST['gateway_id'];
+            $name = htmlspecialchars(trim($_POST['name']));
+            $number = htmlspecialchars(trim($_POST['number']));
+            $is_crypto = isset($_POST['is_crypto']) ? 1 : 0;
+
+            $stmt = $pdo->prepare("SELECT logo_url FROM payment_gateways WHERE id = ?");
+            $stmt->execute([$gateway_id]);
+            $current_logo = $stmt->fetchColumn();
+
+            $logo_url = handle_image_upload($_FILES['logo'] ?? null, $upload_dir, 'gateway-');
+
+            if ($logo_url && $current_logo && file_exists($current_logo)) {
+                unlink($current_logo);
             }
-            update_setting($pdo, 'payment_methods', $payment_methods);
-            $redirect_url = 'admin.php?view=settings';
+
+            $stmt = $pdo->prepare("UPDATE payment_gateways SET name = ?, number = ?, is_crypto = ? WHERE id = ?");
+            $stmt->execute([$name, $number, $is_crypto, $gateway_id]);
+
+            if ($logo_url) {
+                $stmt = $pdo->prepare("UPDATE payment_gateways SET logo_url = ? WHERE id = ?");
+                $stmt->execute([$logo_url, $gateway_id]);
+            }
+
+            $redirect_url = 'admin.php?view=payment-gateways';
+            break;
+
+        case 'delete_gateway':
+            $gateway_id = $_POST['gateway_id'];
+
+            $stmt = $pdo->prepare("SELECT logo_url FROM payment_gateways WHERE id = ?");
+            $stmt->execute([$gateway_id]);
+            $logo_to_delete = $stmt->fetchColumn();
+
+            if ($logo_to_delete && file_exists($logo_to_delete)) {
+                unlink($logo_to_delete);
+            }
+
+            $stmt = $pdo->prepare("DELETE FROM payment_gateways WHERE id = ?");
+            $stmt->execute([$gateway_id]);
+
+            $redirect_url = 'admin.php?view=payment-gateways';
             break;
         case 'update_smtp_settings':
             $smtp_settings = $site_config['smtp_settings'] ?? [];
